@@ -26,7 +26,7 @@ namespace NugetTree.Implementation
             if (!File.Exists(filename))
                 throw new ArgumentException($"Project does not exist: {filename}", nameof(filename));
 
-            var projectName = filename.Substring(filename.LastIndexOf("\\") + 1);
+            var projectName = filename.Substring(filename.LastIndexOf("/") + 1);
 
             var fileContents = File.ReadAllText(filename);
             var xel = XElement.Parse(fileContents);

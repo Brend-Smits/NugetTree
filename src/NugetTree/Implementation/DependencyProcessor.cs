@@ -33,13 +33,14 @@ namespace NugetTree.Implementation
             var solutionContent = File.ReadAllText(solutionFileName);
             var matches = PROJECT_PATH_REGEX.Matches(solutionContent);
 
-            var solutionName = solutionFileName.Substring(solutionFileName.LastIndexOf("\\") + 1);
+            var solutionName = solutionFileName.Substring(solutionFileName.LastIndexOf("/") + 1);
             var projects = new List<ProjectDependencyInfo>();
 
             foreach (Match match in matches)
             {
                 var group = match.Groups[1];
-                var projectFilename = solutionFileName.Replace(solutionName, group.Value);
+                string groupValue = group.Value.Replace('\\','/');
+                var projectFilename = solutionFileName.Replace(solutionName, groupValue);
 
                 var project = await _projectReader.ReadProjectFile(projectFilename);
                 projects.Add(project);
