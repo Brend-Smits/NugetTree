@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -10,35 +11,36 @@ namespace NugetTree.Implementation
 {
     public class ProjectReader : IProjectReader
     {
-        private const string INCLUDE = "Include";
-        private const string ITEM_GROUP = "ItemGroup";
-        private const string PACKAGE_REFERENCE = "PackageReference";
-        private const string PROPERTY_GROUP = "PropertyGroup";
-        private const string TARGET_FRAMEWORK = "TargetFramework";
-        private const string TARGET_FRAMEWORK_VERSION = "TargetFrameworkVersion";
-        private const string VERSION = "Version";
+        private const string Include = "Include";
+        private const string ItemGroup = "ItemGroup";
+        private const string PackageReference = "PackageReference";
+        private const string PropertyGroup = "PropertyGroup";
+        private const string TargetFramework = "TargetFramework";
+        private const string TargetFrameworkVersion = "TargetFrameworkVersion";
+        private const string Version = "Version";
 
         public Task<ProjectDependencyInfo> ReadProjectFile(string filename)
         {
-            if (String.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(filename))
                 throw new ArgumentNullException(nameof(filename));
 
             if (!File.Exists(filename))
                 throw new ArgumentException($"Project does not exist: {filename}", nameof(filename));
 
-            var projectName = filename.Substring(filename.LastIndexOf("/") + 1);
+            string projectName = filename.Substring(filename.LastIndexOf("/", StringComparison.Ordinal) + 1)
+                .Replace(".csproj", "");
 
-            var fileContents = File.ReadAllText(filename);
-            var xel = XElement.Parse(fileContents);
+            string fileContents = File.ReadAllText(filename);
+            XElement xel = XElement.Parse(fileContents);
 
             // <Project>
             //   <ItemGroup>
             //     <PackageReference />
             //   </ItemGroup>
             // </Project>
-            var referenceElements = xel.Elements()
-                .Where(el => el.Name.LocalName == ITEM_GROUP)
-                .SelectMany(g => g.Elements().Where(gel => gel.Name.LocalName == PACKAGE_REFERENCE));
+            IEnumerable<XElement> referenceElements = xel.Elements()
+                .Where(el => el.Name.LocalName == ItemGroup)
+                .SelectMany(g => g.Elements().Where(gel => gel.Name.LocalName == PackageReference));
 
             // <Project>
             //   <PropertyGroup>
@@ -46,25 +48,36 @@ namespace NugetTree.Implementation
             //     <TargetFrameworkVersion /> ==> v4.5, v4.7.2, ...
             //   </PropertyGroup>
             // </Project>
-            var frameworkEl = xel.Elements()
-                .Where(el => el.Name.LocalName == PROPERTY_GROUP)
-                .SelectMany(el => el.Elements().Where(pel => pel.Name.LocalName == TARGET_FRAMEWORK)
-                .Concat(el.Elements().Where(cel => cel.Name.LocalName == TARGET_FRAMEWORK_VERSION)))
+            XElement frameworkEl = xel.Elements()
+                .Where(el => el.Name.LocalName == PropertyGroup)
+                .SelectMany(el => el.Elements().Where(pel => pel.Name.LocalName == TargetFramework)
+                    .Concat(el.Elements().Where(cel => cel.Name.LocalName == TargetFrameworkVersion)))
                 .FirstOrDefault();
 
-            var frameworkName = frameworkEl?.Value;
+            // <Project>
+            //   <PropertyGroup>
+            //     <Version />        ==> 1.0.0.1
+            //   </PropertyGroup>
+            // </Project>
+            XElement versionElement = xel.Elements()
+                .Where(el => el.Name.LocalName == PropertyGroup)
+                .SelectMany(el => el.Elements().Where(pel => pel.Name.LocalName == Version))
+                .DefaultIfEmpty(new XElement(Version, "1.0.0")).Single();
 
-            var dependencies = referenceElements.Select(element =>
+            string frameworkName = frameworkEl?.Value;
+            string projectVersion = versionElement.Value;
+
+            IEnumerable<Dependency> dependencies = referenceElements.Select(element =>
             {
                 // <PackageReference Include="Microsoft.Extensions.Logging.Abstractions">
                 //     <Version>3.0.1</Version>
                 // </PackageReference>
                 // or:
                 // <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="3.0.1" />
-                var packageId = element.Attributes().FirstOrDefault(a => a.Name.LocalName == INCLUDE)?.Value;
-                var versionId = element.Attributes().FirstOrDefault(a => a.Name.LocalName == VERSION)?.Value
-                    ?? element.Elements().FirstOrDefault(el => el.Name.LocalName == VERSION)?.Value
-                    ?? string.Empty;
+                string packageId = element.Attributes().FirstOrDefault(a => a.Name.LocalName == Include)?.Value;
+                string versionId = element.Attributes().FirstOrDefault(a => a.Name.LocalName == Version)?.Value
+                                   ?? element.Elements().FirstOrDefault(el => el.Name.LocalName == Version)?.Value
+                                   ?? string.Empty;
 
                 return new Dependency
                 {
@@ -75,10 +88,11 @@ namespace NugetTree.Implementation
                 };
             });
 
-            var project = new ProjectDependencyInfo()
+            ProjectDependencyInfo project = new ProjectDependencyInfo
             {
                 FrameworkVersion = frameworkName ?? "Unknown",
                 ProjectName = projectName,
+                ProjectVersion = projectVersion,
                 Dependencies = dependencies.ToList()
             };
 

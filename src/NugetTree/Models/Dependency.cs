@@ -6,16 +6,10 @@ namespace NugetTree.Models
 {
     public class Dependency : IHasDependencies
     {
-        private static readonly Regex THREE_PART_VERSION = new Regex(@"^\d+\.\d+\.\d+$", RegexOptions.Compiled);
+        private static readonly Regex ThreePartVersion = new Regex(@"^\d+\.\d+\.\d+$", RegexOptions.Compiled);
 
         private List<Dependency> _dependencies;
         private string _version;
-
-        public IEnumerable<Dependency> Dependencies
-        {
-            get { return _dependencies ?? (_dependencies = new List<Dependency>()); }
-            set { _dependencies = value?.ToList(); }
-        }
 
         public bool FoundInSources { get; set; }
 
@@ -27,21 +21,21 @@ namespace NugetTree.Models
 
         public string Version
         {
-            get
-            {
-                return _version;
-            }
+            get => _version;
             set
             {
-                var val = value ?? string.Empty;
-                if (THREE_PART_VERSION.IsMatch(val))
-                {
-                    val += ".0";
-                }
+                string val = value ?? string.Empty;
+                if (ThreePartVersion.IsMatch(val)) val += ".0";
                 _version = val;
             }
         }
 
         public string VersionLimited { get; set; }
+
+        public IEnumerable<Dependency> Dependencies
+        {
+            get { return _dependencies ??= new List<Dependency>(); }
+            set => _dependencies = value?.ToList();
+        }
     }
 }

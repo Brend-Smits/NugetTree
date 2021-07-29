@@ -17,8 +17,8 @@ namespace NugetTree.Implementation
 {
     public class ProjectReaderNugetDependencyDecorator : IProjectReader
     {
-        private const bool INCLUDE_PRERELEASE = false;
-        private const string PACKAGES_CONFIG_FILENAME = "packages.config";
+        private const bool IncludePrerelease = false;
+        private const string PackagesConfigFilename = "packages.config";
 
         private readonly IProjectReader _base;
         private readonly SourceCacheContext _cacheContext;
@@ -44,37 +44,37 @@ namespace NugetTree.Implementation
 
         public async Task<ProjectDependencyInfo> ReadProjectFile(string filename)
         {
-            var project = await _base.ReadProjectFile(filename);
+            ProjectDependencyInfo project = await _base.ReadProjectFile(filename);
             if (project == null)
                 return null;
 
-            var packagesConfigPath = filename.Replace(project.ProjectName, PACKAGES_CONFIG_FILENAME);
+            string packagesConfigPath = filename.Replace(project.ProjectName, PackagesConfigFilename);
 
             PopulateDependenciesFromPackagesConfig(project, packagesConfigPath);
 
-            foreach (var dependency in project.Dependencies)
-            {
-                await PopulateDependencies(dependency);
-            }
+            foreach (Dependency dependency in project.Dependencies) await PopulateDependencies(dependency);
 
             return project;
         }
 
         private async Task PopulateDependencies(Dependency dependency)
         {
-            var dependencies = new List<Dependency>();
+            List<Dependency> dependencies = new List<Dependency>();
 
-            NuGetVersion.TryParse(dependency.Version, out var version);
-            var package = new PackageIdentity(dependency.Name, version);
-            var framework = String.IsNullOrEmpty(dependency.Framework)
+            NuGetVersion.TryParse(dependency.Version, out NuGetVersion version);
+            PackageIdentity package = new PackageIdentity(dependency.Name, version);
+            NuGetFramework framework = string.IsNullOrEmpty(dependency.Framework)
                 ? NuGetFramework.AnyFramework
                 : NuGetFramework.ParseFrameworkName(dependency.Framework, new DefaultFrameworkNameProvider());
 
-            var dependencyInfo = await _dependencyResolver.ResolvePackage(package, framework, _cacheContext, _logger, _cancellationToken);
+            SourcePackageDependencyInfo dependencyInfo =
+                await _dependencyResolver.ResolvePackage(package, framework, _cacheContext, _logger,
+                    _cancellationToken);
 
             if (dependencyInfo == null)
             {
-                _logger.LogWarning($"Package not available in source(s): {dependency.Name} {dependency.Version}. Required by {dependency.Project}");
+                _logger.LogWarning(
+                    $"Package not available in source(s): {dependency.Name} {dependency.Version}. Required by {dependency.Project}");
                 return;
             }
 
@@ -83,26 +83,32 @@ namespace NugetTree.Implementation
             if (dependencyInfo?.Dependencies == null)
                 return;
 
-            foreach (var info in dependencyInfo.Dependencies)
+            foreach (PackageDependency info in dependencyInfo.Dependencies)
             {
-                var searchResults = await _metadataProvider.GetMetadataAsync(info.Id, includePrerelease: INCLUDE_PRERELEASE, includeUnlisted: false, sourceCacheContext: _cacheContext, _logger, _cancellationToken);
+                IEnumerable<IPackageSearchMetadata> searchResults = await _metadataProvider.GetMetadataAsync(info.Id,
+                    IncludePrerelease, false, _cacheContext, _logger, _cancellationToken);
 
-                var metadata = searchResults.OrderBy(s => s.Identity.Version).LastOrDefault(r => info.VersionRange.Satisfies(r.Identity.Version));
+                IPackageSearchMetadata metadata = searchResults.OrderBy(s => s.Identity.Version)
+                    .LastOrDefault(r => info.VersionRange.Satisfies(r.Identity.Version));
 
                 if (metadata == null)
                 {
-                    _logger.LogWarning($"Package not available in source(s): {info.Id} {info.VersionRange}.  Required by {dependency.Name} from {dependency.Project}");
+                    _logger.LogWarning(
+                        $"Package not available in source(s): {info.Id} {info.VersionRange}.  Required by {dependency.Name} from {dependency.Project}");
                     continue;
                 }
 
-                var subpackage = await _dependencyResolver.ResolvePackage(metadata.Identity, framework, _cacheContext, _logger, _cancellationToken);
-                var childDependency = new Dependency
+                SourcePackageDependencyInfo subpackage = await _dependencyResolver.ResolvePackage(metadata.Identity,
+                    framework, _cacheContext, _logger, _cancellationToken);
+                Dependency childDependency = new Dependency
                 {
                     Framework = dependency.Framework,
                     Name = subpackage.Id,
                     Version = subpackage.Version?.Version?.ToString(),
                     Project = dependency.Project,
-                    VersionLimited = info.VersionRange.MaxVersion == null ? null : $"{info.VersionRange.MaxVersion.Version.ToString()} by {dependency.Name} ({dependency.Version})"
+                    VersionLimited = info.VersionRange.MaxVersion == null
+                        ? null
+                        : $"{info.VersionRange.MaxVersion.Version} by {dependency.Name} ({dependency.Version})"
                 };
 
                 dependencies.Add(childDependency);
@@ -118,22 +124,22 @@ namespace NugetTree.Implementation
             if (!File.Exists(packagesConfigPath))
                 return;
 
-            var fileContent = File.ReadAllText(packagesConfigPath);
+            string fileContent = File.ReadAllText(packagesConfigPath);
 
-            var xel = XElement.Parse(fileContent);
-            var packages = xel.Elements()
+            XElement xel = XElement.Parse(fileContent);
+            IEnumerable<Dependency> packages = xel.Elements()
                 .Where(l => l.Name.LocalName == "package")
                 .Select(el =>
                 {
-                    var packageId = el.Attributes().FirstOrDefault(a => a.Name.LocalName == "id")?.Value;
-                    var packageVersion = el.Attributes().FirstOrDefault(a => a.Name.LocalName == "version")?.Value;
+                    string packageId = el.Attributes().FirstOrDefault(a => a.Name.LocalName == "id")?.Value;
+                    string packageVersion = el.Attributes().FirstOrDefault(a => a.Name.LocalName == "version")?.Value;
 
                     return new Dependency
                     {
                         Framework = project.FrameworkVersion,
                         Name = packageId,
                         Project = project.ProjectName,
-                        Version = packageVersion,
+                        Version = packageVersion
                     };
                 });
 

@@ -6,6 +6,7 @@ namespace NugetTree.Core
 {
     public interface IDependencyProcessor
     {
-        Task<IEnumerable<ProjectDependencyInfo>> ProcessSolution(string solutionFileName, params OutputType[] outputTypes);
+        Task<IEnumerable<ProjectDependencyInfo>> ProcessSolution(string solutionFileName,
+            params OutputType[] outputTypes);
     }
 }

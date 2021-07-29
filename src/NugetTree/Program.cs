@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using NuGet.Common;
+using NugetTree.Core;
 using NugetTree.Models;
 
 namespace NugetTree
@@ -11,13 +13,10 @@ namespace NugetTree
     {
         public static async Task Main(string[] args)
         {
-            var targetSolution = default(string);
-            var outputs = new List<OutputType>();
-
-            foreach (var arg in args)
-            {
+            string targetSolution = default;
+            List<OutputType> outputs = new List<OutputType>();
+            foreach (string arg in args)
                 if (arg.StartsWith("-"))
-                {
                     switch (arg)
                     {
                         case "-c":
@@ -39,18 +38,11 @@ namespace NugetTree
                         case "-fv":
                             outputs.Add(OutputType.Frameworks);
                             break;
-
-                        default:
-                            break;
                     }
-                }
                 else
-                {
                     targetSolution = arg;
-                }
-            }
 
-            if (String.IsNullOrEmpty(targetSolution))
+            if (string.IsNullOrEmpty(targetSolution))
             {
                 Console.WriteLine("You must provide a path to a solution file");
                 return;
@@ -68,7 +60,8 @@ namespace NugetTree
                 return;
             }
 
-            var processor = await DependencyProcessorFactory.CreateDependencyProcessorAsync(NuGet.Common.LogLevel.Warning);
+            IDependencyProcessor processor =
+                await DependencyProcessorFactory.CreateDependencyProcessorAsync(LogLevel.Warning);
 
             await processor.ProcessSolution(targetSolution, outputs.ToArray());
         }

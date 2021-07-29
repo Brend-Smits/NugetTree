@@ -8,13 +8,10 @@ namespace NugetTree.Models
 
         public IEnumerable<Dependency> RecurseDependencies()
         {
-            foreach (var dependency in Dependencies)
+            foreach (Dependency dependency in Dependencies)
             {
                 yield return dependency;
-                foreach (var item in ((IHasDependencies)dependency).RecurseDependencies())
-                {
-                    yield return item;
-                }
+                foreach (Dependency item in ((IHasDependencies) dependency).RecurseDependencies()) yield return item;
             }
         }
     }

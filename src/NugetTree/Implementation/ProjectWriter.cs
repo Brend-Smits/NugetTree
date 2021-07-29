@@ -41,13 +41,14 @@ namespace NugetTree.Implementation
 
         private static void WriteConflicts(IEnumerable<ProjectDependencyInfo> projects)
         {
-            var groupedDeps = projects.SelectMany(p => p.FlattenedDependencies).Distinct(new DependencyComparer()).GroupBy(d => d.Name);
-            foreach (var dep in groupedDeps.Where(d => d.Count() > 1))
+            IEnumerable<IGrouping<string, Dependency>> groupedDeps = projects.SelectMany(p => p.FlattenedDependencies)
+                .Distinct(new DependencyComparer()).GroupBy(d => d.Name);
+            foreach (IGrouping<string, Dependency> dep in groupedDeps.Where(d => d.Count() > 1))
             {
                 Console.WriteLine(dep.Key);
-                foreach (var depversion in dep)
+                foreach (Dependency depversion in dep)
                 {
-                    var message = $"   {depversion.Version} ==> {depversion.Project}";
+                    string message = $"   {depversion.Version} ==> {depversion.Project}";
                     if (depversion.VersionLimited != null)
                         message += $" (limited: {depversion.VersionLimited})";
                     Console.WriteLine(message);
@@ -57,61 +58,48 @@ namespace NugetTree.Implementation
 
         private static void WriteDependency(Dependency dependency, int level = 1, bool flat = false)
         {
-            Console.WriteLine($"{new string(' ', level * 3)}{dependency.Name} {dependency.VersionLimited ?? dependency.Version}");
+            Console.WriteLine(
+                $"{new string('-', level * 3)}{dependency.Name} {dependency.VersionLimited ?? dependency.Version}");
             if (flat)
                 return;
 
-            foreach (var dep in dependency.Dependencies)
-            {
-                WriteDependency(dep, level + 1);
-            }
+            foreach (Dependency dep in dependency.Dependencies) WriteDependency(dep, level + 1);
         }
 
         private static void WriteFlat(IEnumerable<ProjectDependencyInfo> projects)
         {
-            foreach (var project in projects)
+            foreach (ProjectDependencyInfo project in projects)
             {
                 Console.WriteLine($"{project.ProjectName} {project.FrameworkVersion}");
-                foreach (var dep in project.FlattenedDependencies)
-                {
-                    WriteDependency(dep, 1, flat: true);
-                }
+                foreach (Dependency dep in project.FlattenedDependencies) WriteDependency(dep, 1, true);
             }
         }
 
         private static void WriteFrameworks(IEnumerable<ProjectDependencyInfo> projects)
         {
-            foreach (var projectGroup in projects.GroupBy(p => p.FrameworkVersion))
+            foreach (IGrouping<string, ProjectDependencyInfo> projectGroup in projects.GroupBy(p => p.FrameworkVersion))
             {
                 Console.WriteLine(projectGroup.Key);
-                foreach (var project in projectGroup.OrderBy(p => p.ProjectName))
-                {
+                foreach (ProjectDependencyInfo project in projectGroup.OrderBy(p => p.ProjectName))
                     Console.WriteLine($"   {project.ProjectName}");
-                }
             }
         }
 
         private static void WriteTopLevel(IEnumerable<ProjectDependencyInfo> projects)
         {
-            foreach (var project in projects)
+            foreach (ProjectDependencyInfo project in projects)
             {
                 Console.WriteLine($"{project.ProjectName} {project.FrameworkVersion}");
-                foreach (var dep in project.Dependencies)
-                {
-                    WriteDependency(dep, 1, flat: true);
-                }
+                foreach (Dependency dep in project.Dependencies) WriteDependency(dep, 1, true);
             }
         }
 
         private static void WriteTree(IEnumerable<ProjectDependencyInfo> projects)
         {
-            foreach (var project in projects)
+            foreach (ProjectDependencyInfo project in projects)
             {
-                Console.WriteLine($"{project.ProjectName} {project.FrameworkVersion}");
-                foreach (var dep in project.Dependencies)
-                {
-                    WriteDependency(dep, 1, flat: false);
-                }
+                Console.WriteLine($"{project.ProjectName} {project.ProjectVersion}");
+                foreach (Dependency dep in project.Dependencies) WriteDependency(dep);
             }
         }
     }

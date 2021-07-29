@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml;
 using NugetTree.Core;
 using NugetTree.Models;
 
@@ -11,7 +12,7 @@ namespace NugetTree.Implementation
 {
     public sealed class DependencyProcessor : IDependencyProcessor
     {
-        private static readonly Regex PROJECT_PATH_REGEX = new Regex(@"""([^""]+\.csproj)""", RegexOptions.Compiled);
+        private static readonly Regex ProjectPathRegex = new Regex(@"""([^""]+\.csproj)""", RegexOptions.Compiled);
 
         private readonly IProjectReader _projectReader;
         private readonly IProjectWriter _projectWriter;
@@ -22,7 +23,8 @@ namespace NugetTree.Implementation
             _projectWriter = projectWriter ?? throw new ArgumentNullException(nameof(projectWriter));
         }
 
-        public async Task<IEnumerable<ProjectDependencyInfo>> ProcessSolution(string solutionFileName, params OutputType[] outputTypes)
+        public async Task<IEnumerable<ProjectDependencyInfo>> ProcessSolution(string solutionFileName,
+            params OutputType[] outputTypes)
         {
             if (string.IsNullOrEmpty(solutionFileName))
                 throw new ArgumentNullException(nameof(solutionFileName));
@@ -30,28 +32,34 @@ namespace NugetTree.Implementation
             if (!File.Exists(solutionFileName))
                 throw new ArgumentException($"Solution does not exist: {solutionFileName}", nameof(solutionFileName));
 
-            var solutionContent = File.ReadAllText(solutionFileName);
-            var matches = PROJECT_PATH_REGEX.Matches(solutionContent);
+            string solutionContent = File.ReadAllText(solutionFileName);
+            MatchCollection matches = ProjectPathRegex.Matches(solutionContent);
 
-            var solutionName = solutionFileName.Substring(solutionFileName.LastIndexOf("/") + 1);
-            var projects = new List<ProjectDependencyInfo>();
+            string solutionName =
+                solutionFileName.Substring(solutionFileName.LastIndexOf("/", StringComparison.Ordinal) + 1);
+            List<ProjectDependencyInfo> projects = new List<ProjectDependencyInfo>();
 
             foreach (Match match in matches)
             {
-                var group = match.Groups[1];
-                string groupValue = group.Value.Replace('\\','/');
-                var projectFilename = solutionFileName.Replace(solutionName, groupValue);
+                Group group = match.Groups[1];
+                string groupValue = group.Value.Replace('\\', '/');
+                string projectFilename = solutionFileName.Replace(solutionName, groupValue);
 
-                var project = await _projectReader.ReadProjectFile(projectFilename);
-                projects.Add(project);
+                try
+                {
+                    ProjectDependencyInfo project = await _projectReader.ReadProjectFile(projectFilename);
+                    projects.Add(project);
+                }
+                catch (XmlException e)
+                {
+                    Console.WriteLine(e);
+                    throw;
+                }
             }
 
             projects = projects.OrderBy(p => p.ProjectName).ToList();
 
-            foreach (var outputType in outputTypes)
-            {
-                _projectWriter.WriteProjects(projects, outputType);
-            }
+            foreach (OutputType outputType in outputTypes) _projectWriter.WriteProjects(projects, outputType);
 
             return projects;
         }
